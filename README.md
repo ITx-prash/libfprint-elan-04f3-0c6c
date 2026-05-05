@@ -15,12 +15,17 @@ A working Linux driver for the **ELAN 04f3:0c6c** fingerprint sensor (ELAN Match
 
 Based on Davide Depau's `elanmoc2` driver for the `04f3:0c4c` sensor, adapted for `04f3:0c6c` via Wireshark USB traffic analysis of the official Windows driver. Key differences resolved: **0-indexed hardware slot addressing** and an ARM-M4 specific pre-commit slot marker sequence (`00 10 <slot>`) observed in the collision-check path before commit.
 
+> [!NOTE]
+> This driver modifies a core system library. While it has been tested and is working, use it at your own risk. Always keep your password as a fallback authentication method.
+
 ## Verify Your Device
 
 Before proceeding, confirm this driver is for your device:
+
 ```bash
 lsusb | grep 04f3
 ```
+
 You should see an entry containing `04f3:0c6c`. If not, this driver is not for your device.
 
 ## Installation
@@ -30,6 +35,7 @@ Because `libfprint` drivers are compiled into the library itself, you need to bu
 ### 1. Install Dependencies
 
 **Ubuntu / Debian**
+
 ```bash
 sudo apt update
 sudo apt install build-essential meson ninja-build git pkg-config \
@@ -39,6 +45,7 @@ sudo apt install build-essential meson ninja-build git pkg-config \
 ```
 
 **Fedora**
+
 ```bash
 sudo dnf install fprintd fprintd-pam git meson ninja-build gcc gcc-c++ \
   glib2-devel libgusb-devel pixman-devel libusb1-devel \
@@ -46,6 +53,7 @@ sudo dnf install fprintd fprintd-pam git meson ninja-build gcc gcc-c++ \
 ```
 
 **Arch Linux**
+
 ```bash
 sudo pacman -Syu base-devel meson git \
   libgudev libgusb pixman glib2 glib2-devel \
@@ -73,6 +81,7 @@ cp libfprint-elan-04f3-0c6c/src/elanmoc2.{c,h} libfprint/libfprint/drivers/elanm
 ### 5. Build and Install
 
 **Ubuntu / Debian and Arch Linux**
+
 ```bash
 cd libfprint
 meson setup builddir
@@ -82,6 +91,7 @@ sudo ldconfig
 ```
 
 **Fedora**
+
 ```bash
 cd libfprint
 meson setup builddir
@@ -97,11 +107,13 @@ sudo ldconfig
 ### 6. Start the Fingerprint Service
 
 **Ubuntu / Debian and Arch Linux**
+
 ```bash
 sudo systemctl restart fprintd
 ```
 
 **Fedora**
+
 ```bash
 sudo systemctl restart fprintd
 
@@ -111,13 +123,14 @@ sudo authselect apply-changes
 ```
 
 > [!WARNING]
-> **System Updates:** Package managers may reinstall the stock `libfprint` during system updates and override this patched library. If your fingerprint suddenly stops working after an update, simply re-run the steps from Step 5 onwards. (On Fedora, updates may also reset your `ldconfig` configuration).
+> **System Updates:** Package managers may reinstall the stock `libfprint` during system updates and override this patched library. If your fingerprint suddenly stops working after an update, simply re-run the steps from Step 5 onwards. On Fedora, updates may also reset your `ldconfig` configuration.
 
 ## Verify It Works
 
 ```bash
 fprintd-list $USER
 ```
+
 If you see `found 1 devices`, you're good to go.
 
 ## Enroll & Use
@@ -125,10 +138,13 @@ If you see `found 1 devices`, you're good to go.
 ```bash
 fprintd-enroll -f right-index-finger $USER
 ```
+
 Tap your finger on the sensor repeatedly when prompted. Once complete, verify it works:
+
 ```bash
 fprintd-verify $USER
 ```
+
 When it says `verify-match (done)`, your fingerprint is ready to use.
 
 Once the device is detected, fingerprint enrollment is usually available directly from your desktop environment's system settings. For **GNOME**, **KDE Plasma**, and **Cinnamon** users, this typically requires no additional configuration. If you are using a minimal or tiling window manager, you may need to configure PAM manually.
@@ -144,6 +160,7 @@ Once the device is detected, fingerprint enrollment is usually available directl
 ## Uninstallation
 
 From the same `libfprint` directory you built in:
+
 ```bash
 sudo ninja -C builddir uninstall
 sudo ldconfig
