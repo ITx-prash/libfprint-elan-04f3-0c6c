@@ -28,6 +28,33 @@ lsusb | grep 04f3
 
 You should see an entry containing `04f3:0c6c`. If not, this driver is not for your device.
 
+### Sensors this driver does *not* support
+
+| Sensor | Status | Notes |
+|---|---|---|
+| `04f3:0c6e` | **Not compatible** | Different protocol, see below |
+
+`04f3:0c6e` is the adjacent product ID and appears on ASUS ZenBook laptops, so
+it is a natural thing to try — but it speaks a different protocol.
+
+Adding it to `elanmoc2_id_table` lets the driver claim the device and report
+`press` scan type with storage, but enrollment fails immediately. The first
+command already answers with an unexpected header:
+
+```
+elanmoc2: command ff 04 (get_enrolled_count), expecting 2 bytes
+elanmoc2: received 4 bytes: 96 5a 00 95
+```
+
+`elanmoc2_cmd_usb_callback()` requires `0x40` as the first byte of every reply
+and aborts with *"Error receiving data from sensor"*. Enlarging the response
+buffer gets past the overflow but not past the header mismatch.
+
+For the record, `04f3:0c6e` is **not** a Match-on-Chip sensor at all: it is a
+149×51 px swipe strip, correctly handled by the mainline `elan` driver. It does
+have a separate bug preventing enrollment there, tracked upstream in
+[libfprint#879](https://gitlab.freedesktop.org/libfprint/libfprint/-/issues/879).
+
 ## Installation
 
 Because `libfprint` drivers are compiled into the library itself, you need to build from source. We use Davide Depau's `elanmoc2` fork as the base since it already contains the required driver structure, and replace the driver files with this patched version.
