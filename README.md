@@ -32,6 +32,9 @@ You should see an entry containing `04f3:0c6c`. If not, this driver is not for y
 
 Because `libfprint` drivers are compiled into the library itself, you need to build from source. We use Davide Depau's `elanmoc2` fork as the base since it already contains the required driver structure, and replace the driver files with this patched version.
 
+> [!IMPORTANT]
+> **Arch Linux and Omarchy users:** skip the steps below and see [Arch Linux / Omarchy](#arch-linux--omarchy) instead. These generic steps install to `/usr/local`, which Arch's dynamic linker does not search, so they appear to succeed and then fail with `no such device`.
+
 ### 1. Install Dependencies
 
 **Ubuntu / Debian**
@@ -50,14 +53,6 @@ sudo apt install build-essential meson ninja-build git pkg-config \
 sudo dnf install fprintd fprintd-pam git meson ninja-build gcc gcc-c++ \
   glib2-devel libgusb-devel pixman-devel libusb1-devel \
   gobject-introspection-devel openssl-devel libgudev-devel gtk-doc
-```
-
-**Arch Linux**
-
-```bash
-sudo pacman -Syu base-devel meson git \
-  libgudev libgusb pixman glib2 glib2-devel \
-  gobject-introspection gtk-doc python-cairo python-gobject fprintd
 ```
 
 ### 2. Clone Davide Depau's elanmoc2 fork
@@ -80,7 +75,7 @@ cp libfprint-elan-04f3-0c6c/src/elanmoc2.{c,h} libfprint/libfprint/drivers/elanm
 
 ### 5. Build and Install
 
-**Ubuntu / Debian and Arch Linux**
+**Ubuntu / Debian**
 
 ```bash
 cd libfprint
@@ -106,7 +101,7 @@ sudo ldconfig
 
 ### 6. Start the Fingerprint Service
 
-**Ubuntu / Debian and Arch Linux**
+**Ubuntu / Debian**
 
 ```bash
 sudo systemctl restart fprintd
@@ -123,7 +118,52 @@ sudo authselect apply-changes
 ```
 
 > [!WARNING]
-> **System Updates:** Package managers may reinstall the stock `libfprint` during system updates and override this patched library. If your fingerprint suddenly stops working after an update, simply re-run the steps from Step 5 onwards. On Fedora, updates may also reset your `ldconfig` configuration.
+> **System Updates:** Package managers may reinstall the stock `libfprint` during system updates and override this patched library. If your fingerprint suddenly stops working after an update, simply re-run the steps from Step 5 onwards. On Fedora, updates may also reset your `ldconfig` configuration. (The Arch package in [`packaging/arch/`](packaging/arch/PKGBUILD) is not affected: pacman tracks it and will not silently replace it.)
+
+## Arch Linux / Omarchy
+
+On Arch the generic steps above appear to succeed and then do nothing. `meson setup builddir` defaults to `prefix=/usr/local`, but `/usr/local/lib` is not on Arch's dynamic linker search path. `/etc/ld.so.conf.d/` carries no entry for it on a stock install, and glibc's built-in trusted directories are only `/lib` and `/usr/lib`. So `sudo ldconfig` is a no-op, `fprintd` goes on loading the stock `/usr/lib/libfprint-2.so.2`, and enrollment fails with `Impossible to enroll: no such device`.
+
+You can confirm that is what happened:
+
+```bash
+ldd /usr/lib/fprintd | grep fprint                      # => /usr/lib/libfprint-2.so.2
+strings /usr/lib/libfprint-2.so.2 | grep -c elanmoc2    # => 0
+```
+
+(Debian and Ubuntu list `/usr/local/lib` in `ld.so.conf` by default, which is why the generic steps work there.)
+
+Build a package instead, so pacman owns the library and installs it to `/usr/lib`:
+
+```bash
+sudo pacman -S --needed base-devel git
+git clone https://github.com/ITx-prash/libfprint-elan-04f3-0c6c.git
+cd libfprint-elan-04f3-0c6c/packaging/arch
+makepkg -si
+sudo systemctl restart fprintd
+```
+
+[`packaging/arch/PKGBUILD`](packaging/arch/PKGBUILD) clones Depau's fork and this repository itself, so steps 2–4 above are not needed. Pacman will ask to remove the existing `libfprint` (or `libfprint-git`). Accept it. The replacement satisfies `fprintd`'s `libfprint-2.so=2-64` dependency in the same transaction, so the daemon is never left without a library.
+
+Verify with `fprintd-list $USER`, which should report `found 1 devices`.
+
+Because the package is foreign to pacman (it is in no repository), neither `pacman -Syu` nor `omarchy update` will replace it.
+
+### Omarchy
+
+Omarchy ships a wizard that wires up PAM for `sudo`, polkit and the lock screen, including a clamshell gate so that a closed lid falls straight through to the password prompt instead of blocking on an unreachable sensor. Prefer it over editing PAM by hand:
+
+```bash
+omarchy setup security fingerprint
+```
+
+Run it **after** installing the package. On a stock Omarchy system it detects this reader (it matches on the `ELAN:ARM-M4` product string), installs `libfprint-git` from the `[omarchy]` repository, then fails at enrollment, because that build has no driver for `04f3:0c6c`, and exits before configuring PAM.
+
+> [!IMPORTANT]
+> The wizard guards its package install with `pacman -Q libfprint-git`, which resolves `provides`. The PKGBUILD therefore declares `provides=('libfprint-git')` so that check passes and the wizard leaves your patched library in place. Without it the wizard runs `pacman -S --needed --noconfirm --ask 4 libfprint-git`, whose `--ask 4` silently accepts replacing the patched package with the stock one. Fingerprint then stops working again, with nothing on screen to say why.
+
+> [!NOTE]
+> Depau's fork is based on libfprint **1.94.9**, older than what Arch and Omarchy currently ship. Installing this trades newer fixes for *other* drivers against support for this sensor.
 
 ## Verify It Works
 
@@ -152,7 +192,8 @@ Once the device is detected, fingerprint enrollment is usually available directl
 ## Troubleshooting
 
 - **No device found after install (Fedora):** Ensure the `lib64` ldconfig entry exists — re-run the `echo` and `ldconfig` commands from Step 5, then restart `fprintd`.
-- **No device found after install (Ubuntu/Debian/Arch):** Run `sudo ldconfig` then `sudo systemctl restart fprintd`. If still not found, suspend and resume your laptop or reboot to reset the sensor's USB state.
+- **No device found after install (Ubuntu/Debian):** Run `sudo ldconfig` then `sudo systemctl restart fprintd`. If still not found, suspend and resume your laptop or reboot to reset the sensor's USB state.
+- **No device found after install (Arch/Omarchy):** `sudo ldconfig` will not help, because `/usr/local/lib` is not on Arch's linker path. Use [Arch Linux / Omarchy](#arch-linux--omarchy).
 - **Fingerprint not working for sudo or login (Ubuntu/Debian):** Ensure `libpam-fprintd` is installed — `sudo apt install libpam-fprintd` — then re-enroll.
 - **Fingerprint not working for sudo or login (Fedora):** Run `sudo authselect enable-feature with-fingerprint && sudo authselect apply-changes` then re-enroll.
 - **Errors during enroll/verify:** Run `fprintd-delete $USER`, restart the service with `sudo systemctl restart fprintd`, and try again.
@@ -164,6 +205,14 @@ From the same `libfprint` directory you built in:
 ```bash
 sudo ninja -C builddir uninstall
 sudo ldconfig
+```
+
+On Arch/Omarchy, remove the package and restore the stock library instead:
+
+```bash
+sudo pacman -Rns libfprint-elanmoc2-0c6c
+sudo pacman -S libfprint          # or libfprint-git on Omarchy
+sudo systemctl restart fprintd
 ```
 
 ## Credits

@@ -1,0 +1,48 @@
+# Contributor: David Lawton <djl.glasgow@gmail.com>
+# libfprint built from Depau's elanmoc2 fork with ITx-prash's patch
+# adding support for the ELAN 04f3:0c6c (ELAN Match-on-Chip 2) sensor.
+
+pkgname=libfprint-elanmoc2-0c6c
+pkgver=1.94.9
+pkgrel=1
+pkgdesc="libfprint with the elanmoc2 driver patched for the ELAN 04f3:0c6c sensor"
+arch=('x86_64')
+url="https://github.com/ITx-prash/libfprint-elan-04f3-0c6c"
+license=('LGPL-2.1-or-later')
+depends=('glib2' 'glibc' 'gcc-libs' 'libgusb' 'libgudev' 'openssl' 'pixman' 'systemd-libs')
+makedepends=('meson' 'ninja' 'git' 'gobject-introspection' 'python-cairo' 'python-gobject')
+# Takes over the libfprint slot. 'libfprint-git' is provided as well as
+# conflicted: Omarchy's setup script gates on `pacman -Q libfprint-git`, which
+# resolves provides, so declaring it stops that script reinstalling the stock
+# package over this one.
+provides=('libfprint' 'libfprint-2.so' 'libfprint-git')
+conflicts=('libfprint' 'libfprint-git')
+options=('!lto')
+source=("libfprint::git+https://gitlab.freedesktop.org/Depau/libfprint.git#branch=elanmoc2"
+        "patch::git+https://github.com/ITx-prash/libfprint-elan-04f3-0c6c.git")
+sha256sums=('SKIP' 'SKIP')
+
+prepare() {
+  # Replace the 0c4c driver with the 0c6c-adapted version.
+  install -Dm644 "$srcdir/patch/src/elanmoc2.c" "$srcdir/libfprint/libfprint/drivers/elanmoc2/elanmoc2.c"
+  install -Dm644 "$srcdir/patch/src/elanmoc2.h" "$srcdir/libfprint/libfprint/drivers/elanmoc2/elanmoc2.h"
+
+  # Fail loudly if the device ID ever drifts out of the driver's id_table.
+  grep -q '0x0c6c' "$srcdir/libfprint/libfprint/drivers/elanmoc2/elanmoc2.c" \
+    || { echo "ERROR: 0x0c6c missing from elanmoc2 id_table" >&2; exit 1; }
+}
+
+build() {
+  # prefix=/usr is the whole point: this must land where fprintd actually looks.
+  arch-meson libfprint build \
+    -Ddoc=false \
+    -Dinstalled-tests=false \
+    -Dgtk-examples=false \
+    -Dudev_rules_dir=/usr/lib/udev/rules.d
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+  install -Dm644 "$srcdir/patch/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
