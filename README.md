@@ -136,7 +136,7 @@ strings /usr/lib/libfprint-2.so.2 | grep -c elanmoc2    # => 0
 Build a package instead, so pacman owns the library and installs it to `/usr/lib`:
 
 ```bash
-sudo pacman -S --needed base-devel git
+sudo pacman -S --needed base-devel git fprintd
 git clone https://github.com/ITx-prash/libfprint-elan-04f3-0c6c.git
 cd libfprint-elan-04f3-0c6c/packaging/arch
 makepkg -si

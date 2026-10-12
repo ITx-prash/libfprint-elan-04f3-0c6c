@@ -10,7 +10,7 @@ arch=('x86_64')
 url="https://github.com/ITx-prash/libfprint-elan-04f3-0c6c"
 license=('LGPL-2.1-or-later')
 depends=('glib2' 'glibc' 'gcc-libs' 'libgusb' 'libgudev' 'openssl' 'pixman' 'systemd-libs')
-makedepends=('meson' 'ninja' 'git' 'gobject-introspection' 'python-cairo' 'python-gobject')
+makedepends=('meson' 'ninja' 'git' 'glib2-devel' 'gobject-introspection' 'python-cairo' 'python-gobject')
 # Takes over the libfprint slot. 'libfprint-git' is provided as well as
 # conflicted: Omarchy's setup script gates on `pacman -Q libfprint-git`, which
 # resolves provides, so declaring it stops that script reinstalling the stock
